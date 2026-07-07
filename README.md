@@ -1,1 +1,1 @@
-# wishart-rejection-sampling
+# Wishart Rejection Sampler
