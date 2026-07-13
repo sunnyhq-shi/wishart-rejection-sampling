@@ -6,7 +6,7 @@ $$X_i \sim \text{Wishart}_p(2\alpha, \Sigma), \qquad i = 1, \dots, n,$$
 
 under two prior specifications for $(\alpha, \mu)$ where $\mu = 2\alpha\Sigma$:
 
-- **Improper prior:** $p(\alpha,\mu) \propto (\alpha-\tfrac{p-1}{2})^{-1}\,|\mu|^{-(p+1)/2}$
+- **Improper prior:** $p(\alpha,\mu) \propto (\alpha-\tfrac{p-1}{2})^{-1}|\mu|^{-(p+1)/2}$
 - **Proper prior:** $\alpha \sim \text{Gamma}(\beta, \beta\eta)$ truncated at $(p-1)/2$, with $\mu \mid \alpha \sim \text{inv-Wishart}(2\kappa\alpha,\, 2\kappa\alpha\mu_0)$
 
 The posterior mode of $\alpha$ is located with a Newton-within-EM algorithm, and joint samples of $(\alpha, \mu)$ are drawn by rejection sampling against a truncated Gamma covering density.
