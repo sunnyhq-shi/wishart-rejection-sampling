@@ -1,6 +1,6 @@
 # Bayesian Inference for the Wishart Shape Parameter
 
-Posterior inference for the shape parameter of a Wishart distribution,
+Posterior inference for the shape parameter of a $p$ dimensional ($p \geq 2$) Wishart distribution,
 
 $$X_i \sim \text{Wishart}_p(2\alpha, \Sigma), \qquad i = 1, \dots, n,$$
 
