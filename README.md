@@ -40,29 +40,30 @@ You don't need `git` installed to get these two files into an R session — `dow
 dir.create("wishart-inference", showWarnings = FALSE)
 
 download.file(
-  "https://raw.githubusercontent.com/<your-username>/<your-repo>/main/wishart_inference.cpp",
+  "https://raw.githubusercontent.com/sunnyhq-shi/wishart-rejection-sampling
+/main/wishart_inference.cpp",
   destfile = "wishart-inference/wishart_inference.cpp"
 )
 download.file(
-  "https://raw.githubusercontent.com/<your-username>/<your-repo>/main/wishart_inference.R",
+  "https://raw.githubusercontent.com/sunnyhq-shi/wishart-rejection-sampling
+/main/wishart_inference.R",
   destfile = "wishart-inference/wishart_inference.R"
 )
 
 setwd("wishart-inference")
 ```
 
-Replace `<your-username>/<your-repo>` with the actual GitHub path once this is published.
-
 Other ways to get it, if you prefer:
 
 - **Clone the whole repo** (requires `git` on your system, run from a terminal, not R):
   ```bash
-  git clone https://github.com/<your-username>/<your-repo>.git
+  git clone https://github.com/sunnyhq-shi/wishart-rejection-sampling
+.git
   ```
 - **Download the ZIP** — on the repo's GitHub page, use *Code → Download ZIP*, then unzip locally.
 - **From R with `usethis`** (if installed), which wraps the same idea as the ZIP download:
   ```r
-  usethis::create_from_github("<your-username>/<your-repo>", destdir = ".")
+  usethis::create_from_github("sunnyhq-shi/wishart-rejection-sampling", destdir = ".")
   ```
 
 Once you have both files in the same working directory, everything else happens inside R.
