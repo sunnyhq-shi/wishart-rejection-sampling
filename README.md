@@ -118,6 +118,4 @@ res_pro <- wishart_inference(
 - The proper prior requires the prior mode $(\beta-1)/(\beta\eta)$ to lie strictly above $(p-1)/2$, or there's no valid interior starting point.
 - `wishart_inference()` catches genuine numerical/convergence failures internally and returns `list(error = "...")` rather than raising, so a batch job over many datasets won't die on one bad case. The lower-level `mode_alphaEM()` / `rejection_sampler()` functions always raise directly — useful when you want failures to surface immediately during development.
 
-## License
 
-Add a license of your choosing (e.g. MIT) before publishing.
