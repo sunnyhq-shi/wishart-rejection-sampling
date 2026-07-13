@@ -67,3 +67,34 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+
+# History files
+.Rhistory
+.Rapp.history
+
+# Session data
+.RData
+.Ruserdata
+
+# RStudio user-specific project files
+.Rproj.user/
+
+# OAuth2 tokens (never commit credentials!)
+.httr-oauth
+.httr-oauth-cached
+
+# Local environment variables containing secrets
+.Renviron
+.env
+
+# Data files (avoid tracking large formats)
+*.csv
+*.rds
+*.RData
+data/
+
+# Output directories
+docs/
+*.tar.gz
+*.Rcheck/
