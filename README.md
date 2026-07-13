@@ -57,8 +57,7 @@ Other ways to get it, if you prefer:
 
 - **Clone the whole repo** (requires `git` on your system, run from a terminal, not R):
   ```bash
-  git clone https://github.com/sunnyhq-shi/wishart-rejection-sampling
-.git
+  git clone https://github.com/sunnyhq-shi/wishart-rejection-sampling.git
   ```
 - **Download the ZIP** — on the repo's GitHub page, use *Code → Download ZIP*, then unzip locally.
 - **From R with `usethis`** (if installed), which wraps the same idea as the ZIP download:
