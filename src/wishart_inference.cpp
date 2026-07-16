@@ -217,6 +217,10 @@ Rcpp::List rejection_sample_unified(double ahat, int p, int n,
  * @brief Simple hello-world test to verify the library loaded correctly.
  * @return 0
  */
+//' Hello-world test to verify the library loaded correctly
+//'
+//' @return Always returns 0. Also prints "Hello from C++" as a side effect.
+//' @export
 // [[Rcpp::export]]
 int test() {
     Rcout << "Hello from C++" << std::endl;
@@ -280,6 +284,19 @@ bool rwishart(int n, int p, double nu, arma::mat Sigma, arma::cube& Wa) {
  * @return      Cube of size (p, p, n) containing the Wishart draws
  * @throws      Rcpp::exception if nu <= p-1 or Sigma is not positive definite
  */
+//' Generate draws from a Wishart distribution
+//'
+//' Uses the Bartlett decomposition: if L is the lower Cholesky factor of
+//' Sigma, then A = L * T satisfies W = A * A^T ~ Wishart_p(nu, Sigma),
+//' where T is lower triangular with T(i,i) ~ sqrt(Chi^2(nu - i)) and
+//' T(i,j) ~ N(0,1) for i > j.
+//'
+//' @param n Number of draws
+//' @param p Dimension of the matrix, must be >= 2
+//' @param nu Degrees of freedom, must be > p - 1
+//' @param Sigma Scale matrix (p x p), must be positive definite
+//' @return A cube of size (p, p, n) containing the Wishart draws
+//' @export
 // [[Rcpp::export]]
 arma::cube rwishart(int n, int p, double nu, const arma::mat& Sigma) {
 
@@ -342,6 +359,16 @@ double lgammap(double a, int p) {
  * @return  log Gamma_p(a)
  * @throws  Rcpp::exception if a <= (p-1)/2
  */
+//' Log of the multivariate Gamma function
+//'
+//' Defined as log Gamma_p(a) = p*(p-1)/4 * log(pi) plus the sum over
+//' i = 1, ..., p of log Gamma(a - (i-1)/2). Required for the normalizing
+//' constant of the Wishart and inverse-Wishart distributions.
+//'
+//' @param a Argument, must be > (p-1)/2
+//' @param p Dimension
+//' @return log Gamma_p(a)
+//' @export
 // [[Rcpp::export]]
 double lgammap_export(double a, int p) { return lgammap(a, p); }
 
@@ -400,6 +427,13 @@ double trigammap(double a, int p) {
  * @return  log|X|
  * @throws  std::runtime_error if determinant is non-positive
  */
+//' Log determinant of a positive definite matrix
+//'
+//' Uses Armadillo's log_det for numerical stability.
+//'
+//' @param X Square positive definite matrix
+//' @return log|X|
+//' @export
 // [[Rcpp::export]]
 double ldet(const arma::mat& X) {
     double val, sign;
@@ -429,6 +463,16 @@ double ldet(const arma::mat& X) {
  * @throws  std::runtime_error via ldet() if any slice X_i is not positive
  *          definite. More likely when nu is close to p-1.
  */
+//' Compute sufficient statistics for Wishart observations
+//'
+//' Returns the sample mean matrix xbar and the log geometric mean of
+//' determinants ldetxbarg, the sufficient statistics for (alpha, Sigma)
+//' under X_i ~ Wishart_p(2*alpha, Sigma).
+//'
+//' @param X Cube of n Wishart draws, dimensions (p, p, n)
+//' @return A list with \code{xbar} (p x p sample mean matrix) and
+//'   \code{ldetxbarg} (log geometric mean of determinants)
+//' @export
 // [[Rcpp::export]]
 Rcpp::List wishart_stats(const arma::cube& X) {
     check_n_p((int)X.n_slices, (int)X.n_rows);
@@ -497,6 +541,19 @@ double fpfun(double a, int p) {
  * @param ldetxbarg Log geometric mean of determinants (1/n)*sum log|X_i|
  * @return          log f*(alpha), or R_NegInf if alpha <= (p-1)/2
  */
+//' Log unnormalized marginal posterior of alpha under the improper prior
+//'
+//' The improper prior p(alpha,mu) propto (alpha-(p-1)/2)^(-1) *
+//' |mu|^(-(p+1)/2), after marginalizing over mu, gives a closed-form
+//' log posterior for alpha. Returns \code{-Inf} when \code{a <= (p-1)/2}.
+//'
+//' @param a Shape parameter alpha, must be > (p-1)/2
+//' @param n Number of Wishart observations
+//' @param p Dimension
+//' @param xbar Sample mean matrix (p x p)
+//' @param ldetxbarg Log geometric mean of determinants (1/n)*sum log|X_i|
+//' @return log f*(alpha), or -Inf if alpha <= (p-1)/2
+//' @export
 // [[Rcpp::export]]
 double lfafun_improper(double a, int n, int p,
                        const arma::mat& xbar, double ldetxbarg) {
@@ -763,6 +820,24 @@ Rcpp::NumericVector mode_alphaEM_improper(int n, int p,
  * @param kappa      inv-Wishart prior strength, must be >= 1
  * @return           log f*(alpha), or R_NegInf if outside domain
  */
+//' Log unnormalized marginal posterior of alpha under the proper prior
+//'
+//' The proper prior alpha ~ Gamma(beta, beta*eta) (truncated at
+//' (p-1)/2) and mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
+//' after marginalizing over mu, gives a closed-form log posterior for
+//' alpha. Returns \code{-Inf} outside the domain \code{alpha > (p-1)/2}.
+//'
+//' @param a Shape parameter alpha, must be > (p-1)/2
+//' @param n Number of Wishart observations
+//' @param p Dimension
+//' @param ldet_muhat log|muhat| where muhat = (n*xbar + kappa*mu0)/(n+kappa)
+//' @param ldetxbarg Log geometric mean of determinants (1/n)*sum log|X_i|
+//' @param ldet_mu0 log|mu0|
+//' @param beta Gamma prior shape, must be > 1
+//' @param eta Gamma prior rate parameter
+//' @param kappa inv-Wishart prior strength, must be >= 1
+//' @return log f*(alpha), or -Inf if outside domain
+//' @export
 // [[Rcpp::export]]
 double lfafun_proper(double a, int n, int p,
                      double ldet_muhat, double ldetxbarg,
@@ -1074,6 +1149,28 @@ Rcpp::NumericVector mode_alphaEM_proper(int n, int p,
  * @param prnt     If true, print EM iterates and bounds
  * @return         NumericVector {ahat, log f*(ahat)}
  */
+//' Find the posterior mode of alpha
+//'
+//' Dispatches to the improper- or proper-prior EM mode finder depending
+//' on which parameters are supplied. The prior type is auto-detected:
+//' omit \code{mu0}, \code{beta}, \code{eta}, \code{kappa} for the
+//' improper prior; supply \code{mu0} and \code{beta > 1}, \code{kappa >= 1}
+//' for the proper prior. Uses a Newton-within-EM algorithm.
+//'
+//' @param n Number of Wishart observations
+//' @param p Dimension
+//' @param xbar Sample mean matrix (p x p)
+//' @param ldetxbarg Log geometric mean of determinants
+//' @param mu0_ Prior center matrix (p x p); omit for improper prior
+//' @param beta Gamma prior shape, must be > 1 (ignored if improper)
+//' @param eta Gamma prior rate (ignored if improper)
+//' @param kappa inv-Wishart prior strength, must be >= 1 (ignored if improper)
+//' @param tol Convergence tolerance
+//' @param prnt If TRUE, print EM iterates and bounds
+//' @param max_em_iter Maximum number of EM iterations
+//' @param max_nr_iter Maximum number of inner Newton-Raphson iterations
+//' @return A numeric vector \code{c(ahat, log f*(ahat))}
+//' @export
 // [[Rcpp::export]]
 Rcpp::NumericVector mode_alphaEM(int n, int p,
                                   const arma::mat& xbar,
@@ -1265,6 +1362,29 @@ double acpt_rate_unified(double ahat, int p, int n,
  * @return         List with alpha_sample, mu_sample, empirical_acpt_rate,
  *                 theoretical_acpt_rate
  */
+//' Rejection sampler for the joint posterior of (alpha, mu)
+//'
+//' Requires the posterior mode \code{ahat} and \code{mxlfa} = log f*(ahat)
+//' from \code{mode_alphaEM()}, plus the covering Gamma parameters
+//' \code{lambda} and \code{nu_star}. Prior type is auto-detected from
+//' parameters, exactly as in \code{mode_alphaEM()}.
+//'
+//' @param ahat Posterior mode from \code{mode_alphaEM()[1]}
+//' @param mxlfa log f*(ahat) from \code{mode_alphaEM()[2]}
+//' @param lambda Covering Gamma rate
+//' @param nu_star Covering Gamma shape (= ahat*lambda + 1)
+//' @param p Dimension
+//' @param n Number of Wishart observations
+//' @param xbar Sample mean matrix (p x p)
+//' @param ldetxbarg Log geometric mean of determinants
+//' @param mu0_ Prior center matrix; omit for improper prior
+//' @param beta Gamma prior shape; 0 = improper, must be > 1 if proper
+//' @param eta Gamma prior rate; default 1.0
+//' @param kappa inv-Wishart prior strength; 0 = improper, must be >= 1 if proper
+//' @param nsamp Number of posterior samples (default 10000)
+//' @return A list with \code{alpha_sample}, \code{mu_sample},
+//'   \code{empirical_acpt_rate}, \code{theoretical_acpt_rate}
+//' @export
 // [[Rcpp::export]]
 Rcpp::List rejection_sampler(double ahat, double mxlfa,
                               double lambda, double nu_star,
@@ -1482,6 +1602,29 @@ Rcpp::List rejection_sample_unified(double ahat, int p, int n,
  *                     - cover_rate:            lambda
  * @throws         Rcpp::exception if beta <= 1 or kappa < 1 (proper prior)
  */
+//' Bayesian inference for the Wishart shape parameter
+//'
+//' Given \code{X_1,...,X_n ~ iid Wishart_p(2*alpha, Sigma)}, computes the
+//' posterior of (alpha, mu) where mu = alpha*Sigma, under either an
+//' improper or proper prior. Runs the full pipeline: sufficient
+//' statistics, EM mode finding, and rejection sampling.
+//'
+//' @param X Cube of n Wishart observations, dimensions (p, p, n)
+//' @param mu0_ Prior center matrix (p x p); omit for improper prior
+//' @param beta Gamma prior shape, must be > 1 (ignored if improper)
+//' @param eta Gamma prior rate parameter (ignored if improper)
+//' @param kappa inv-Wishart prior strength, must be >= 1 (ignored if improper)
+//' @param nsamp Number of posterior samples
+//' @param tol Convergence tolerance for the EM mode finder
+//' @param prnt If TRUE, print EM iterates
+//' @param max_em_iter Maximum number of EM iterations
+//' @param max_nr_iter Maximum number of inner Newton-Raphson iterations
+//' @return A list with \code{results} (alpha_samples, mu_samples, ahat,
+//'   theoretical_acpt_rate, empirical_acpt_rate) and \code{statistics}
+//'   (xbar, muhat, log_det_geometric_mean, cover_shape, cover_rate,
+//'   elapsed_seconds). If a convergence failure is caught internally,
+//'   returns \code{list(error = "...")} instead.
+//' @export
 // [[Rcpp::export]]
 Rcpp::List wishart_inference(arma::cube& X,
                               Rcpp::Nullable<arma::mat> mu0_ = R_NilValue,

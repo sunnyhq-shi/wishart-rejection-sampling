@@ -1,0 +1,20 @@
+Package: wishartinference
+Type: Package
+Title: Bayesian Inference for the Wishart Distribution Parameters
+Version: 0.1.0
+Authors@R: c(
+    person("Phil", "Everson", email = "peverso1@swarthmore.edu", role = c("aut")),
+    person("Hanqi", "Shi", email = "hshi1@swarthmore.edu", role = c("aut", "cre")))
+Description: Posterior inference for the shape parameter alpha and mean
+    matrix mu in the model X_i ~ Wishart_p(2*alpha, Sigma), under both
+    an improper prior and a proper Gamma/inverse-Wishart prior. The
+    posterior mode is found via a Newton-within-EM algorithm and joint
+    samples are drawn via rejection sampling.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports: Rcpp
+LinkingTo: Rcpp, RcppArmadillo, BH
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
