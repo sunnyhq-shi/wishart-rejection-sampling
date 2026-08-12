@@ -32,7 +32,7 @@ if (!requireNamespace("wishartinference", quietly = TRUE)) {
 }
 library(wishartinference)
 
-# Verify the library loaded correctly。
+# Verify the library loaded correctly.
 # Should print "Hello from C++"
 test()
 
@@ -81,11 +81,11 @@ cat("Sample log geometric mean of determinants: ", ldetxbarg)
 # =======================================================
 # Two approaches are available:
 #
-#   (A) PACKAGED  — wishart_inference() does everything  
+#   (A) PACKAGED  -- wishart_inference() does everything  
 #                   in one call: sufficient statistics,   
 #                   mode finding, and sampling.
 #
-#   (B) MANUAL    — call each step separately for full   
+#   (B) MANUAL    -- call each step separately for full   
 #                   control: wishart_stats(), then        
 #                   mode_alphaEM(), then rejection_sampler().
 #
@@ -100,28 +100,28 @@ cat("Sample log geometric mean of determinants: ", ldetxbarg)
 # -------------------------------------------------------
 #
 # INPUT:
-#   X         — p x p x n array of Wishart observations (required)
-#   mu0       — p x p prior center matrix (omit for improper prior)
-#   beta      — Gamma prior shape, must be >= 0 (proper prior only)
-#   eta       — Gamma prior rate, must be >= 0 (proper prior only)
-#   kappa     — inv-Wishart prior strength >= 1 (proper prior only)
-#   nsamp     — number of posterior samples (default 10000)
-#   prnt      — print EM iterations if TRUE (default FALSE)
+#   X         -- p x p x n array of Wishart observations (required)
+#   mu0       -- p x p prior center matrix (omit for improper prior)
+#   beta      -- Gamma prior shape, must be >= 0 (proper prior only)
+#   eta       -- Gamma prior rate, must be >= 0 (proper prior only)
+#   kappa     -- inv-Wishart prior strength >= 1 (proper prior only)
+#   nsamp     -- number of posterior samples (default 10000)
+#   prnt      -- print EM iterations if TRUE (default FALSE)
 #
 # OUTPUT: a list with two sublists:
 #   $results
-#     $alpha_samples         — vector of nsamp posterior draws of alpha
-#     $mu_samples            — p x p x nsamp array of posterior draws of mu
-#     $ahat                  — posterior mode of alpha
-#     $theoretical_acpt_rate — theoretical acceptance rate of sampler
-#     $empirical_acpt_rate   — empirical acceptance rate of sampler
+#     $alpha_samples         -- vector of nsamp posterior draws of alpha
+#     $mu_samples            -- p x p x nsamp array of posterior draws of mu
+#     $ahat                  -- posterior mode of alpha
+#     $theoretical_acpt_rate -- theoretical acceptance rate of sampler
+#     $empirical_acpt_rate   -- empirical acceptance rate of sampler
 #   $statistics
-#     $xbar                  — p x p sample mean matrix
-#     $muhat                 — p x p posterior center of mu
-#     $log_det_geometric_mean— ldetxbarg
-#     $cover_shape           — nu_star (covering Gamma shape)
-#     $cover_rate            — lambda  (covering Gamma rate)
-#     $elapsed_seconds       — wall-clock time for full inference
+#     $xbar                  -- p x p sample mean matrix
+#     $muhat                 -- p x p posterior center of mu
+#     $log_det_geometric_mean-- ldetxbarg
+#     $cover_shape           -- nu_star (covering Gamma shape)
+#     $cover_rate            -- lambda  (covering Gamma rate)
+#     $elapsed_seconds       -- wall-clock time for full inference
 #
 # -------------------------------------------------------
 # IMPROPER PRIOR (default)
@@ -143,7 +143,7 @@ cat("Sample log geometric mean of determinants: ", ldetxbarg)
 # -------------------------------------------------------
 res_imp <- wishart_inference(X, nsamp=50000)
 
-# optional: verbose — print EM iterations and convergence
+# optional: verbose -- print EM iterations and convergence
 # res_imp <- wishart_inference(X, prnt = TRUE)
 
 cat("--- Improper Prior ---\n")
@@ -333,9 +333,9 @@ legend("topright",
 # sampler independently without rerunning the whole pipeline.
 #
 # The three steps are:
-#   1. wishart_stats()     — compute sufficient statistics
-#   2. mode_alphaEM()      — find the posterior mode
-#   3. rejection_sampler() — draw posterior samples
+#   1. wishart_stats()     -- compute sufficient statistics
+#   2. mode_alphaEM()      -- find the posterior mode
+#   3. rejection_sampler() -- draw posterior samples
 # -------------------------------------------------------
 
 # Step 1: sufficient statistics (already computed above)
@@ -345,17 +345,17 @@ legend("topright",
 # Step 2: mode_alphaEM()
 #
 # INPUT:
-#   n, p        — sample size and dimension
-#   xbar        — sample mean matrix from wishart_stats()
-#   ldetxbarg   — log geometric mean of determinants
-#   mu0         — prior center matrix (omit for improper)
-#   beta, eta, kappa — prior parameters (omit for improper)
-#   prnt        — print EM iterations if TRUE
+#   n, p        -- sample size and dimension
+#   xbar        -- sample mean matrix from wishart_stats()
+#   ldetxbarg   -- log geometric mean of determinants
+#   mu0         -- prior center matrix (omit for improper)
+#   beta, eta, kappa -- prior parameters (omit for improper)
+#   prnt        -- print EM iterations if TRUE
 #
 # OUTPUT: NumericVector {ahat, log f*(ahat)}
 # -------------------------------------------------------
 
-# improper (omit mu0 — uses defaults)
+# improper (omit mu0 -- uses defaults)
 ahat_imp <- mode_alphaEM(n, p, xbar, ldetxbarg)
 cat("improper mode:", ahat_imp[1], "  log f*(ahat):", ahat_imp[2], "\n")
 
@@ -364,7 +364,7 @@ ahat_pro <- mode_alphaEM(n, p, xbar, ldetxbarg,
                          mu0 = mu0, beta = beta, eta = eta, kappa = kappa)
 cat("proper mode:  ", ahat_pro[1], "  log f*(ahat):", ahat_pro[2], "\n")
 
-# optional: verbose — print EM iterates
+# optional: verbose -- print EM iterates
 cat("\n--- EM verbose ---\n")
 ahat_verb <- mode_alphaEM(n, p, xbar, ldetxbarg,
                           mu0 = mu0, beta = beta, eta = eta, kappa = kappa,
@@ -377,15 +377,15 @@ ahat_verb <- mode_alphaEM(n, p, xbar, ldetxbarg,
 # covering Gamma parameters lambda and nu_star.
 #
 # INPUT:
-#   ahat, mxlfa  — mode and log f*(mode) from mode_alphaEM()
-#   lambda       — covering Gamma rate
-#   nu_star      — covering Gamma shape (= ahat*lambda + 1)
-#   p, n         — dimension and sample size
-#   xbar         — sample mean matrix
-#   ldetxbarg    — log geometric mean of determinants
-#   mu0          — prior center matrix (omit for improper)
-#   beta, eta, kappa — prior parameters (omit for improper)
-#   nsamp        — number of posterior samples (default 10000)
+#   ahat, mxlfa  -- mode and log f*(mode) from mode_alphaEM()
+#   lambda       -- covering Gamma rate
+#   nu_star      -- covering Gamma shape (= ahat*lambda + 1)
+#   p, n         -- dimension and sample size
+#   xbar         -- sample mean matrix
+#   ldetxbarg    -- log geometric mean of determinants
+#   mu0          -- prior center matrix (omit for improper)
+#   beta, eta, kappa -- prior parameters (omit for improper)
+#   nsamp        -- number of posterior samples (default 10000)
 #
 # OUTPUT: list with alpha_sample, mu_sample,
 #         empirical_acpt_rate, theoretical_acpt_rate
@@ -569,8 +569,8 @@ str(r)
 # matrix data.
 # =======================================================
 
-set.seed(6)
-n_g <- 10
+set.seed(11)
+n_g <- 20
 a_g <- 3                      # true alpha
 x_g <- rgamma(n_g, a_g, a_g)  # mean 1
 
@@ -591,4 +591,3 @@ cat("posterior mode:       ", res_g_pro$results$ahat, "\n")
 cat("95% Interval:         ", quantile(res_g_pro$results$alpha_samples, c(0.025, 0.975)), "\n")
 cat("theoretical acpt rate:", res_g_pro$results$theoretical_acpt_rate, "\n")
 cat("empirical acpt rate:  ", res_g_pro$results$empirical_acpt_rate, "\n")
-
