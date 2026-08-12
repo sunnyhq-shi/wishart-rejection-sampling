@@ -30,9 +30,9 @@ mode_alphaEM(
 
 \item{mu0_}{Prior center matrix (p x p); omit for improper prior}
 
-\item{beta}{Gamma prior shape, must be > 1 (ignored if improper)}
+\item{beta}{Gamma prior shape, must be >= 0 (ignored if improper)}
 
-\item{eta}{Gamma prior rate (ignored if improper)}
+\item{eta}{Gamma prior rate, must be >= 0 (ignored if improper)}
 
 \item{kappa}{inv-Wishart prior strength, must be >= 1 (ignored if improper)}
 
@@ -51,6 +51,6 @@ A numeric vector \code{c(ahat, log f*(ahat))}
 Dispatches to the improper- or proper-prior EM mode finder depending
 on which parameters are supplied. The prior type is auto-detected:
 omit \code{mu0}, \code{beta}, \code{eta}, \code{kappa} for the
-improper prior; supply \code{mu0} and \code{beta > 1}, \code{kappa >= 1}
+improper prior; supply \code{mu0} and \code{beta >= 0}, \code{kappa >= 1}
 for the proper prior. Uses a Newton-within-EM algorithm.
 }

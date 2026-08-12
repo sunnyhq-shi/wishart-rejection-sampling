@@ -22,9 +22,9 @@ wishart_inference(
 
 \item{mu0_}{Prior center matrix (p x p); omit for improper prior}
 
-\item{beta}{Gamma prior shape, must be > 1 (ignored if improper)}
+\item{beta}{Gamma prior shape, must be >= 0 (ignored if improper)}
 
-\item{eta}{Gamma prior rate parameter (ignored if improper)}
+\item{eta}{Gamma prior rate parameter, must be >= 0 (ignored if improper)}
 
 \item{kappa}{inv-Wishart prior strength, must be >= 1 (ignored if improper)}
 

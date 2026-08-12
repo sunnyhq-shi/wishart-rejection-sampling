@@ -39,9 +39,9 @@ rejection_sampler(
 
 \item{mu0_}{Prior center matrix; omit for improper prior}
 
-\item{beta}{Gamma prior shape; 0 = improper, must be > 1 if proper}
+\item{beta}{Gamma prior shape; 0 = improper (with defaults below), must be >= 0 if proper}
 
-\item{eta}{Gamma prior rate; default 1.0}
+\item{eta}{Gamma prior rate; default 1.0, must be >= 0 if proper}
 
 \item{kappa}{inv-Wishart prior strength; 0 = improper, must be >= 1 if proper}
 

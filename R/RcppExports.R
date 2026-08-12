@@ -84,8 +84,8 @@ lfafun_improper <- function(a, n, p, xbar, ldetxbarg) {
 
 #' Log unnormalized marginal posterior of alpha under the proper prior
 #'
-#' The proper prior alpha ~ Gamma(beta, beta*eta) (truncated at
-#' (p-1)/2) and mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
+#' The proper prior (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta) and
+#' mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
 #' after marginalizing over mu, gives a closed-form log posterior for
 #' alpha. Returns \code{-Inf} outside the domain \code{alpha > (p-1)/2}.
 #'
@@ -95,8 +95,8 @@ lfafun_improper <- function(a, n, p, xbar, ldetxbarg) {
 #' @param ldet_muhat log|muhat| where muhat = (n*xbar + kappa*mu0)/(n+kappa)
 #' @param ldetxbarg Log geometric mean of determinants (1/n)*sum log|X_i|
 #' @param ldet_mu0 log|mu0|
-#' @param beta Gamma prior shape, must be > 1
-#' @param eta Gamma prior rate parameter
+#' @param beta Gamma prior shape, must be >= 0
+#' @param eta Gamma prior rate parameter, must be >= 0
 #' @param kappa inv-Wishart prior strength, must be >= 1
 #' @return log f*(alpha), or -Inf if outside domain
 #' @export
@@ -109,7 +109,7 @@ lfafun_proper <- function(a, n, p, ldet_muhat, ldetxbarg, ldet_mu0, beta, eta, k
 #' Dispatches to the improper- or proper-prior EM mode finder depending
 #' on which parameters are supplied. The prior type is auto-detected:
 #' omit \code{mu0}, \code{beta}, \code{eta}, \code{kappa} for the
-#' improper prior; supply \code{mu0} and \code{beta > 1}, \code{kappa >= 1}
+#' improper prior; supply \code{mu0} and \code{beta >= 0}, \code{kappa >= 1}
 #' for the proper prior. Uses a Newton-within-EM algorithm.
 #'
 #' @param n Number of Wishart observations
@@ -117,8 +117,8 @@ lfafun_proper <- function(a, n, p, ldet_muhat, ldetxbarg, ldet_mu0, beta, eta, k
 #' @param xbar Sample mean matrix (p x p)
 #' @param ldetxbarg Log geometric mean of determinants
 #' @param mu0_ Prior center matrix (p x p); omit for improper prior
-#' @param beta Gamma prior shape, must be > 1 (ignored if improper)
-#' @param eta Gamma prior rate (ignored if improper)
+#' @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+#' @param eta Gamma prior rate, must be >= 0 (ignored if improper)
 #' @param kappa inv-Wishart prior strength, must be >= 1 (ignored if improper)
 #' @param tol Convergence tolerance
 #' @param prnt If TRUE, print EM iterates and bounds
@@ -146,8 +146,8 @@ mode_alphaEM <- function(n, p, xbar, ldetxbarg, mu0_ = NULL, beta = 0.0, eta = 1
 #' @param xbar Sample mean matrix (p x p)
 #' @param ldetxbarg Log geometric mean of determinants
 #' @param mu0_ Prior center matrix; omit for improper prior
-#' @param beta Gamma prior shape; 0 = improper, must be > 1 if proper
-#' @param eta Gamma prior rate; default 1.0
+#' @param beta Gamma prior shape; 0 = improper (with defaults below), must be >= 0 if proper
+#' @param eta Gamma prior rate; default 1.0, must be >= 0 if proper
 #' @param kappa inv-Wishart prior strength; 0 = improper, must be >= 1 if proper
 #' @param nsamp Number of posterior samples (default 10000)
 #' @return A list with \code{alpha_sample}, \code{mu_sample},
@@ -166,8 +166,8 @@ rejection_sampler <- function(ahat, mxlfa, lambda, nu_star, p, n, xbar, ldetxbar
 #'
 #' @param X Cube of n Wishart observations, dimensions (p, p, n)
 #' @param mu0_ Prior center matrix (p x p); omit for improper prior
-#' @param beta Gamma prior shape, must be > 1 (ignored if improper)
-#' @param eta Gamma prior rate parameter (ignored if improper)
+#' @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+#' @param eta Gamma prior rate parameter, must be >= 0 (ignored if improper)
 #' @param kappa inv-Wishart prior strength, must be >= 1 (ignored if improper)
 #' @param nsamp Number of posterior samples
 #' @param tol Convergence tolerance for the EM mode finder
@@ -182,5 +182,102 @@ rejection_sampler <- function(ahat, mxlfa, lambda, nu_star, p, n, xbar, ldetxbar
 #' @export
 wishart_inference <- function(X, mu0_ = NULL, beta = 0.0, eta = 1.0, kappa = 0.0, nsamp = 10000L, tol = 1e-6, prnt = FALSE, max_em_iter = 1000L, max_nr_iter = 100L) {
     .Call(`_wishartinference_wishart_inference`, X, mu0_, beta, eta, kappa, nsamp, tol, prnt, max_em_iter, max_nr_iter)
+}
+
+#' Log unnormalized posterior of alpha, gamma (p = 1) case
+#'
+#' The p = 1 reduction of the Wishart model: X_i ~ Gamma(alpha, alpha/mu).
+#' Auto-detects improper vs. proper exactly as the p >= 2 functions do
+#' (beta = 0, eta = 1, kappa = 0 = improper), except kappa = 0 alone
+#' (with beta > 0) is also valid here -- a proper prior on alpha with a
+#' flat/improper treatment of mu -- unlike the p >= 2 backend, which
+#' requires kappa >= 1 whenever the prior isn't fully improper.
+#'
+#' @param a Shape parameter alpha, must be > 0
+#' @param n Number of scalar observations
+#' @param xbar Sample mean of the observations
+#' @param ldetxbarg mean(log(x)) -- scalar analogue of ldetxbarg
+#' @param beta Gamma prior shape, must be >= 0 (0 = improper)
+#' @param eta Gamma prior rate, must be >= 0
+#' @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+#' @param mu0 Prior center for mu, must be > 0
+#' @return log f*(alpha), or -Inf if a <= 0
+#' @export
+lfafun_gamma <- function(a, n, xbar, ldetxbarg, beta = 0.0, eta = 1.0, kappa = 0.0, mu0 = 1.0) {
+    .Call(`_wishartinference_lfafun_gamma`, a, n, xbar, ldetxbarg, beta, eta, kappa, mu0)
+}
+
+#' EM algorithm to find the posterior mode of alpha, gamma (p = 1) case
+#'
+#' Scalar (p = 1) analogue of \code{mode_alphaEM()}. See the C++ doc
+#' comment for details on the bisection-style ascent used here and the
+#' n = 2, kappa = 0, beta = 0 structural boundary case.
+#'
+#' @param n Number of scalar observations
+#' @param xbar Sample mean of the observations
+#' @param ldetxbarg mean(log(x))
+#' @param beta Gamma prior shape, must be >= 0 (0 = improper)
+#' @param eta Gamma prior rate, must be >= 0
+#' @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+#' @param mu0 Prior center for mu, must be > 0
+#' @param tol Convergence tolerance
+#' @param prnt If TRUE, print EM iterates and bounds
+#' @param max_em_iter Maximum number of EM iterations
+#' @return A numeric vector \code{c(ahat, log f*(ahat))}
+#' @export
+mode_alphaEM_gamma <- function(n, xbar, ldetxbarg, beta = 0.0, eta = 1.0, kappa = 0.0, mu0 = 1.0, tol = 1e-6, prnt = FALSE, max_em_iter = 1000L) {
+    .Call(`_wishartinference_mode_alphaEM_gamma`, n, xbar, ldetxbarg, beta, eta, kappa, mu0, tol, prnt, max_em_iter)
+}
+
+#' Rejection sampler for the joint posterior of (alpha, mu), gamma (p = 1) case
+#'
+#' Scalar (p = 1) analogue of \code{rejection_sampler()}. mu | alpha, x is
+#' drawn from reciprocal-Gamma(nk_eff*alpha, alpha*(n*xbar+kappa*mu0)) --
+#' see the C++ doc comment for the derivation.
+#'
+#' @param n Number of scalar observations
+#' @param xbar Sample mean of the observations
+#' @param ldetxbarg mean(log(x))
+#' @param ahat Posterior mode from \code{mode_alphaEM_gamma()[1]}
+#' @param mxlfa log f*(ahat) from \code{mode_alphaEM_gamma()[2]}
+#' @param beta Gamma prior shape, must be >= 0 (0 = improper)
+#' @param eta Gamma prior rate, must be >= 0
+#' @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+#' @param mu0 Prior center for mu, must be > 0
+#' @param nsamp Number of posterior samples (default 10000)
+#' @return A list with \code{alpha_sample}, \code{mu_sample},
+#'   \code{empirical_acpt_rate}, \code{theoretical_acpt_rate}
+#' @export
+rejection_sampler_gamma <- function(n, xbar, ldetxbarg, ahat, mxlfa, beta = 0.0, eta = 1.0, kappa = 0.0, mu0 = 1.0, nsamp = 10000L) {
+    .Call(`_wishartinference_rejection_sampler_gamma`, n, xbar, ldetxbarg, ahat, mxlfa, beta, eta, kappa, mu0, nsamp)
+}
+
+#' Bayesian inference for the Wishart shape parameter, gamma (p = 1) case
+#'
+#' Given \code{x_1,...,x_n ~ iid Gamma(alpha, alpha/mu)} -- the p = 1
+#' reduction of \code{X_i ~ Wishart_p(2*alpha, Sigma)} -- computes the
+#' posterior of (alpha, mu) under either an improper or proper prior.
+#' Scalar (p = 1) analogue of \code{wishart_inference()}: takes a plain
+#' numeric vector instead of a p x p x n array, since each observation
+#' is already a positive scalar. There is no unifying dispatch with
+#' \code{wishart_inference()} -- call this directly for scalar data.
+#'
+#' @param x Numeric vector of n scalar observations, each > 0
+#' @param mu0 Prior center for mu, must be > 0 (ignored if improper)
+#' @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+#' @param eta Gamma prior rate, must be >= 0 (ignored if improper)
+#' @param kappa Prior strength on mu, must be >= 0 (ignored if improper)
+#' @param nsamp Number of posterior samples
+#' @param tol Convergence tolerance for the EM mode finder
+#' @param prnt If TRUE, print EM iterates
+#' @param max_em_iter Maximum number of EM iterations
+#' @return A list with \code{results} (alpha_samples, mu_samples, ahat,
+#'   theoretical_acpt_rate, empirical_acpt_rate) and \code{statistics}
+#'   (xbar, muhat, log_det_geometric_mean, cover_shape, cover_rate,
+#'   elapsed_seconds). If a convergence failure is caught internally,
+#'   returns \code{list(error = "...")} instead.
+#' @export
+gamma_inference <- function(x, mu0 = 1.0, beta = 0.0, eta = 1.0, kappa = 0.0, nsamp = 10000L, tol = 1e-6, prnt = FALSE, max_em_iter = 1000L) {
+    .Call(`_wishartinference_gamma_inference`, x, mu0, beta, eta, kappa, nsamp, tol, prnt, max_em_iter)
 }
 

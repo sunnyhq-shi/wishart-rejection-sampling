@@ -149,6 +149,12 @@ inline void check_pd_matrix(const arma::mat& M, int p, const char* name) {
  * shared by mode_alphaEM(), rejection_sampler(), and wishart_inference().
  * Throws with a specific, actionable message on the first violated
  * condition. Does nothing when improper = true.
+ *
+ * Under the current prior, (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta),
+ * so beta and eta only need to be nonnegative (no beta > 1 requirement, and
+ * no condition relating the prior mode to the domain boundary -- unlike the
+ * earlier truncated-Gamma prior). kappa >= 1 is still required for the
+ * inverse-Wishart degrees-of-freedom condition on mu | alpha.
  */
 inline void check_proper_prior_params(int p, double beta, double eta,
                                        double kappa, const arma::mat& mu0,
@@ -158,17 +164,18 @@ inline void check_proper_prior_params(int p, double beta, double eta,
     check_finite(beta,  "beta");
     check_finite(eta,   "eta");
     check_finite(kappa, "kappa");
-    if (beta <= 1.0)  stop("beta must be > 1 for proper prior (got %f)", beta);
-    if (eta  <= 0.0)  stop("eta must be > 0 for proper prior (got %f)", eta);
+    if (beta  < 0.0)  stop("beta must be >= 0 for proper prior (got %f)", beta);
+    if (eta   < 0.0)  stop("eta must be >= 0 for proper prior (got %f)", eta);
     if (kappa < 1.0)  stop("kappa must be >= 1 for proper prior (got %f)", kappa);
 
     check_pd_matrix(mu0, p, "mu0");
 
-    double bound     = (p - 1.0) / 2.0;
-    double prior_mode = (beta - 1.0) / (beta * eta);
-    if (!(prior_mode > bound))
-        stop("prior mode (beta-1)/(beta*eta) = %.4f must be > (p-1)/2 = %.4f. "
-             "Decrease eta or increase beta.", prior_mode, bound);
+    // NOTE: under the current prior, (alpha - (p-1)/2) ~ Gamma(beta, rate =
+    // beta*eta) -- i.e. the shape parameter is shifted to start at the domain
+    // boundary rather than truncated there. This is proper for any beta >= 0,
+    // eta >= 0, so there is no additional prior-mode-vs-boundary condition to
+    // enforce here (unlike the earlier truncated-Gamma prior, which required
+    // beta > 1 and its mode to lie strictly above (p-1)/2).
 }
 
 // -------------------------------------------------------
@@ -785,18 +792,18 @@ Rcpp::NumericVector mode_alphaEM_improper(int n, int p,
 // -------------------------------------------------------
 // PROPER PRIOR
 //
-//   alpha ~ Gamma(beta, beta*eta)  truncated at (p-1)/2
+//   (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta)
 //   mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0)
 // -------------------------------------------------------
 
 /**
  * @brief Log unnormalized marginal posterior of alpha under the proper prior.
  *
- * The proper prior alpha ~ Gamma(beta, beta*eta) (truncated at (p-1)/2) and
+ * The proper prior (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta) and
  * mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0), after marginalizing
  * over mu, gives:
  *
- *   log f*(alpha) = g_p(alpha) + (beta-1)*log(alpha) - lambda*alpha
+ *   log f*(alpha) = g_p(alpha) + (beta-1)*log(alpha - (p-1)/2) - lambda*alpha
  *
  * where:
  *   g_p(alpha) = log Gamma_p((n+k)*alpha)
@@ -815,15 +822,15 @@ Rcpp::NumericVector mode_alphaEM_improper(int n, int p,
  * @param ldet_muhat log|muhat| where muhat = (n*xbar + kappa*mu0)/(n+kappa)
  * @param ldetxbarg  Log geometric mean of determinants (1/n)*sum log|X_i|
  * @param ldet_mu0   log|mu0|
- * @param beta       Gamma prior shape, must be > 1
- * @param eta        Gamma prior rate parameter
+ * @param beta       Gamma prior shape, must be >= 0
+ * @param eta        Gamma prior rate parameter, must be >= 0
  * @param kappa      inv-Wishart prior strength, must be >= 1
  * @return           log f*(alpha), or R_NegInf if outside domain
  */
 //' Log unnormalized marginal posterior of alpha under the proper prior
 //'
-//' The proper prior alpha ~ Gamma(beta, beta*eta) (truncated at
-//' (p-1)/2) and mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
+//' The proper prior (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta) and
+//' mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
 //' after marginalizing over mu, gives a closed-form log posterior for
 //' alpha. Returns \code{-Inf} outside the domain \code{alpha > (p-1)/2}.
 //'
@@ -833,8 +840,8 @@ Rcpp::NumericVector mode_alphaEM_improper(int n, int p,
 //' @param ldet_muhat log|muhat| where muhat = (n*xbar + kappa*mu0)/(n+kappa)
 //' @param ldetxbarg Log geometric mean of determinants (1/n)*sum log|X_i|
 //' @param ldet_mu0 log|mu0|
-//' @param beta Gamma prior shape, must be > 1
-//' @param eta Gamma prior rate parameter
+//' @param beta Gamma prior shape, must be >= 0
+//' @param eta Gamma prior rate parameter, must be >= 0
 //' @param kappa inv-Wishart prior strength, must be >= 1
 //' @return log f*(alpha), or -Inf if outside domain
 //' @export
@@ -869,7 +876,7 @@ double lfafun_proper(double a, int n, int p,
                   + n     * (ldet_muhat - ldetxbarg)
                   + kappa * (ldet_muhat - ldet_mu0);
 
-    return gp + (beta - 1.0) * std::log(a) - a * lambda;
+    return gp + (beta - 1.0) * std::log(a - bound) - a * lambda;
 }
 
 /**
@@ -911,14 +918,17 @@ double compute_ct(double at, int n, int p,
 /**
  * @brief First derivative of EM surrogate Q(alpha|alpha^t) — proper prior.
  *
- * Derived by differentiating Q(alpha|alpha^t) with respect to alpha:
+ * Derived by differentiating Q(alpha|alpha^t) with respect to alpha. Because
+ * the prior is now (alpha-(p-1)/2) ~ Gamma(beta, rate=beta*eta) rather than
+ * a Gamma truncated at (p-1)/2, the prior contributes (beta-1)/(alpha-(p-1)/2)
+ * rather than (beta-1)/alpha:
  *
- *   Q'(alpha|alpha^t) = n*f_p(alpha)/alpha + (beta-1)/alpha
+ *   Q'(alpha|alpha^t) = n*f_p(alpha)/alpha + (beta-1)/(alpha-(p-1)/2)
  *                       + f_p(kappa*alpha)/alpha - c^t
  *
  * Expanding:
  *   = n*p*log(alpha) - n*psi_p(alpha)
- *     + (beta-1)/alpha
+ *     + (beta-1)/(alpha-(p-1)/2)
  *     + kappa*p*log(kappa*alpha) - kappa*psi_p(kappa*alpha)
  *     - c^t
  *
@@ -941,9 +951,10 @@ double Q1fun_proper(double a, double at, int n, int p,
 
     double ct = compute_ct(at, n, p, ldet_muhat, ldetxbarg,
                            ldet_mu0, beta, eta, kappa);
+    double bound = (p - 1.0) / 2.0;
 
     return n * p * std::log(a) - n * digammap(a, p)
-           + (beta - 1.0) / a
+           + (beta - 1.0) / (a - bound)
            + kappa * p * std::log(kappa * a) - kappa * digammap(kappa * a, p)
            - ct;
 }
@@ -954,7 +965,7 @@ double Q1fun_proper(double a, double at, int n, int p,
  * Obtained by differentiating Q'(alpha|alpha^t):
  *
  *   Q''(alpha|alpha^t) = (n+kappa)*p/alpha
- *                        - (beta-1)/alpha^2
+ *                        - (beta-1)/(alpha-(p-1)/2)^2
  *                        - n*psi_p'(alpha)
  *                        - kappa^2 * psi_p'(kappa*alpha)
  *
@@ -974,8 +985,11 @@ double Q1fun_proper(double a, double at, int n, int p,
 double Q2fun_proper(double a, int n, int p,
                     double kappa, double beta) {
 
+    double bound = (p - 1.0) / 2.0;
+    double denom = a - bound;
+
     return (n + kappa) * p / a
-           - (beta - 1.0) / (a * a)
+           - (beta - 1.0) / (denom * denom)
            - n             * trigammap(a,         p)
            - kappa * kappa * trigammap(kappa * a, p);
 }
@@ -984,10 +998,17 @@ double Q2fun_proper(double a, int n, int p,
  * @brief EM algorithm to find the posterior mode of alpha — proper prior.
  *
  * At each iteration, maximizes the surrogate Q(alpha|alpha^t) via Newton's
- * method on Q' within the bracket [alow, aup] derived from bounds on f_p:
+ * method on Q' within the bracket [alow, aup] derived from bounds on f_p.
+ * The upper bound (independent of beta's sign relative to 1, since the prior
+ * is now the shifted Gamma (alpha-(p-1)/2) ~ Gamma(beta, rate=beta*eta)):
  *
- *   alow = ((n+1)*p/2 + (beta-1)) / c^t
- *   aup  = ((n+kappa)*p*(p+1)/2 + (beta-1)) / c^t  +  (p-1)/2
+ *   aup = (n*p*(p+1)/2 + (beta-1) + p*(p+1)/2) / c^t  +  (p-1)/2
+ *
+ * The lower bound depends on the sign of (beta-1), since the prior term
+ * (beta-1)/(alpha-(p-1)/2) in Q' changes sign there:
+ *
+ *   beta <= 1:  alow = (n*p + p) / (2*c^t)
+ *   beta >  1:  alow = (n*p + p + 2*(beta-1)) / (2*c^t)
  *
  * alow is clamped to (p-1)/2 if it falls below the domain boundary.
  * If the actual log posterior lfafun_proper does not increase, bisects
@@ -998,8 +1019,8 @@ double Q2fun_proper(double a, int n, int p,
  * @param xbar  Sample mean matrix (p x p)
  * @param ldetxbarg Log geometric mean of determinants
  * @param mu0   Prior center matrix (p x p)
- * @param beta  Gamma prior shape, must be > 1
- * @param eta   Gamma prior rate parameter
+ * @param beta  Gamma prior shape, must be >= 0
+ * @param eta   Gamma prior rate parameter, must be >= 0
  * @param kappa inv-Wishart prior strength, must be >= 1
  * @param tol   Convergence tolerance on max(|a-aold|, |lfa-lfold|)
  * @param prnt  If true, print iterate and bounds at each EM step
@@ -1022,18 +1043,31 @@ Rcpp::NumericVector mode_alphaEM_proper(int n, int p,
     double ldet_mu0   = ldet(mu0);
     double bound      = (p - 1.0) / 2.0;
 
-    // initial guess: midpoint between domain boundary and upper bound
-    // derived from bounds on f_p in Q'(alpha|alpha^t) = 0
+    // initial guess: midpoint between a lower and an upper bound, both
+    // derived from bounds on f_p in Q'(alpha|alpha^t) = 0 (with lambda in
+    // place of c^t, i.e. treating the prior's exponential-tilt rate as if
+    // it were the full EM constant -- a rough but serviceable starting
+    // point, refined by the EM/Newton iterations that follow).
     double lambda_init = beta * eta
                        + n     * (ldet_muhat - ldetxbarg)
                        + kappa * (ldet_muhat - ldet_mu0);
 
-    double a_upper = (beta - 1.0 + (n * p * p + n * p + p * p) / 2.0) / lambda_init
+    double a_upper = (beta - 1.0 + (n * p * p + n * p + p * p + p) / 2.0) / lambda_init
                      + bound;
 
-    double a = (bound + a_upper) / 2.0;
+    // Lower bound only has a clean closed form when beta is large enough
+    // relative to p (beta > 1 + p*(p+1)/2); otherwise fall back to the
+    // domain boundary itself, as in the upper-bound-only averaging used
+    // previously.
+    double a_lower;
+    if (beta - 1.0 - p - (p - 1.0) * p / 2.0 > 0.0)
+        a_lower = (beta - 1.0 - p - p * (p + n) / 2.0) / lambda_init;
+    else
+        a_lower = bound;
+
+    double a = (a_lower + a_upper) / 2.0;
     // Guard against lambda_init <= 0 (or near the numerical floor) or
-    // otherwise non-finite a_upper, which can happen for adversarial/
+    // otherwise non-finite a_upper/a_lower, which can happen for adversarial/
     // degenerate data-prior combinations and would otherwise send the
     // starting point outside the valid domain, or absurdly far from it
     // (mirroring the same failure mode fixed in the improper-prior finder).
@@ -1057,8 +1091,11 @@ Rcpp::NumericVector mode_alphaEM_proper(int n, int p,
 
         if (ct <= 0.0) stop("c^t is non-positive in proper mode finder");
 
-        double alow = ((n + 1)     * p / 2.0             + (beta - 1.0)) / ct;
-        double aup  = ((n + kappa) * p * (p + 1.0) / 2.0 + (beta - 1.0)) / ct + bound;
+        double alow = (beta <= 1.0)
+                      ? (n * p + p) / (2.0 * ct)
+                      : (n * p + p + 2.0 * (beta - 1.0)) / (2.0 * ct);
+        double aup  = (n * p * (p + 1.0) / 2.0 + (beta - 1.0) + p * (p + 1.0) / 2.0) / ct
+                      + bound;
 
         alow = std::max(alow, bound + BOUND_EPS);
         aup  = std::max(aup,  alow  + BOUND_EPS);
@@ -1142,8 +1179,8 @@ Rcpp::NumericVector mode_alphaEM_proper(int n, int p,
  * @param ldetxbarg Log geometric mean of determinants
  * @param mu0      Prior center matrix (p x p); ignored if improper = true
  * @param improper If true, use improper prior; if false, use proper prior
- * @param beta     Gamma prior shape, must be > 1 (ignored if improper)
- * @param eta      Gamma prior rate (ignored if improper)
+ * @param beta     Gamma prior shape, must be >= 0 (ignored if improper)
+ * @param eta      Gamma prior rate, must be >= 0 (ignored if improper)
  * @param kappa    inv-Wishart prior strength, must be >= 1 (ignored if improper)
  * @param tol      Convergence tolerance
  * @param prnt     If true, print EM iterates and bounds
@@ -1154,7 +1191,7 @@ Rcpp::NumericVector mode_alphaEM_proper(int n, int p,
 //' Dispatches to the improper- or proper-prior EM mode finder depending
 //' on which parameters are supplied. The prior type is auto-detected:
 //' omit \code{mu0}, \code{beta}, \code{eta}, \code{kappa} for the
-//' improper prior; supply \code{mu0} and \code{beta > 1}, \code{kappa >= 1}
+//' improper prior; supply \code{mu0} and \code{beta >= 0}, \code{kappa >= 1}
 //' for the proper prior. Uses a Newton-within-EM algorithm.
 //'
 //' @param n Number of Wishart observations
@@ -1162,8 +1199,8 @@ Rcpp::NumericVector mode_alphaEM_proper(int n, int p,
 //' @param xbar Sample mean matrix (p x p)
 //' @param ldetxbarg Log geometric mean of determinants
 //' @param mu0_ Prior center matrix (p x p); omit for improper prior
-//' @param beta Gamma prior shape, must be > 1 (ignored if improper)
-//' @param eta Gamma prior rate (ignored if improper)
+//' @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+//' @param eta Gamma prior rate, must be >= 0 (ignored if improper)
 //' @param kappa inv-Wishart prior strength, must be >= 1 (ignored if improper)
 //' @param tol Convergence tolerance
 //' @param prnt If TRUE, print EM iterates and bounds
@@ -1355,8 +1392,8 @@ double acpt_rate_unified(double ahat, int p, int n,
  * @param xbar     Sample mean matrix (p x p)
  * @param ldetxbarg Log geometric mean of determinants
  * @param mu0      Prior center matrix; NULL for improper prior
- * @param beta     Gamma prior shape; 0.0 = improper, must be > 1 if proper
- * @param eta      Gamma prior rate; default 1.0
+ * @param beta     Gamma prior shape; 0.0 = improper (with defaults below), must be >= 0 if proper
+ * @param eta      Gamma prior rate; default 1.0, must be >= 0 if proper
  * @param kappa    inv-Wishart prior strength; 0.0 = improper, must be >= 1 if proper
  * @param nsamp    Number of posterior samples (default 10000)
  * @return         List with alpha_sample, mu_sample, empirical_acpt_rate,
@@ -1378,8 +1415,8 @@ double acpt_rate_unified(double ahat, int p, int n,
 //' @param xbar Sample mean matrix (p x p)
 //' @param ldetxbarg Log geometric mean of determinants
 //' @param mu0_ Prior center matrix; omit for improper prior
-//' @param beta Gamma prior shape; 0 = improper, must be > 1 if proper
-//' @param eta Gamma prior rate; default 1.0
+//' @param beta Gamma prior shape; 0 = improper (with defaults below), must be >= 0 if proper
+//' @param eta Gamma prior rate; default 1.0, must be >= 0 if proper
 //' @param kappa inv-Wishart prior strength; 0 = improper, must be >= 1 if proper
 //' @param nsamp Number of posterior samples (default 10000)
 //' @return A list with \code{alpha_sample}, \code{mu_sample},
@@ -1571,7 +1608,7 @@ Rcpp::List rejection_sample_unified(double ahat, int p, int n,
  * under either an improper or proper prior:
  *
  *   Improper: p(alpha,mu) propto (alpha-(p-1)/2)^{-1} * |mu|^{-(p+1)/2}
- *   Proper:   alpha ~ Gamma(beta, beta*eta) truncated at (p-1)/2
+ *   Proper:   (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta)
  *             mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0)
  *
  * The algorithm:
@@ -1583,8 +1620,8 @@ Rcpp::List rejection_sample_unified(double ahat, int p, int n,
  * @param X        Cube of n Wishart observations, dimensions (p, p, n)
  * @param improper If true, use improper prior; if false, use proper prior
  * @param mu0      Prior center matrix (p x p); ignored if improper = true
- * @param beta     Gamma prior shape, must be > 1 (ignored if improper)
- * @param eta      Gamma prior rate parameter (ignored if improper)
+ * @param beta     Gamma prior shape, must be >= 0 (ignored if improper)
+ * @param eta      Gamma prior rate parameter, must be >= 0 (ignored if improper)
  * @param kappa    inv-Wishart prior strength, must be >= 1 (ignored if improper)
  * @param nsamp    Number of posterior samples
  * @return         List with two sublists:
@@ -1600,7 +1637,7 @@ Rcpp::List rejection_sample_unified(double ahat, int p, int n,
  *                     - log_det_geometric_mean: ldetxbarg
  *                     - cover_shape:           nu_star
  *                     - cover_rate:            lambda
- * @throws         Rcpp::exception if beta <= 1 or kappa < 1 (proper prior)
+ * @throws         Rcpp::exception if beta < 0, eta < 0, or kappa < 1 (proper prior)
  */
 //' Bayesian inference for the Wishart shape parameter
 //'
@@ -1611,8 +1648,8 @@ Rcpp::List rejection_sample_unified(double ahat, int p, int n,
 //'
 //' @param X Cube of n Wishart observations, dimensions (p, p, n)
 //' @param mu0_ Prior center matrix (p x p); omit for improper prior
-//' @param beta Gamma prior shape, must be > 1 (ignored if improper)
-//' @param eta Gamma prior rate parameter (ignored if improper)
+//' @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+//' @param eta Gamma prior rate parameter, must be >= 0 (ignored if improper)
 //' @param kappa inv-Wishart prior strength, must be >= 1 (ignored if improper)
 //' @param nsamp Number of posterior samples
 //' @param tol Convergence tolerance for the EM mode finder
@@ -1734,6 +1771,605 @@ Rcpp::List wishart_inference(arma::cube& X,
             Rcpp::Named("statistics") = Rcpp::List::create(
                 Rcpp::Named("xbar")                   = xbar,
                 Rcpp::Named("muhat")                  = muhat_out,
+                Rcpp::Named("log_det_geometric_mean") = ldetxbarg,
+                Rcpp::Named("cover_shape")            = nu_star,
+                Rcpp::Named("cover_rate")             = lambda,
+                Rcpp::Named("elapsed_seconds")        = elapsed
+            )
+        );
+
+    } catch (const std::exception& e) {
+        Rcpp::Rcout << e.what() << std::endl;
+        return Rcpp::List::create(Rcpp::Named("error") = e.what());
+    }
+}
+
+// -------------------------------------------------------
+// GAMMA CASE (p = 1)
+//
+//   X_i ~ Gamma(alpha, alpha/mu), i = 1,...,n
+//   (the p = 1 reduction of X_i ~ Wishart_p(2*alpha, Sigma))
+//
+//   Improper: p(alpha,mu) propto 1/(alpha*mu)
+//   Proper:   alpha ~ Gamma(beta, rate = beta*eta)
+//             mu|alpha ~ reciprocal-Gamma((n+kappa)*alpha,  [kappa > 0]
+//                         alpha*(n*xbar+kappa*mu0))
+//
+// This is a standalone, scalar-only backend living alongside the
+// p >= 2 machinery above. It intentionally does NOT reuse lgammap/
+// digammap/trigammap or arma::mat/cube -- each observation here is
+// already a positive scalar, so wrapping everything in 1x1 matrices
+// just to share code with the p >= 2 path would be pure overhead
+// (and the two backends aren't literally interchangeable anyway:
+// unlike the p >= 2 proper prior, which requires kappa >= 1
+// whenever it isn't fully improper, this scalar model allows
+// kappa = 0 on its own -- a proper prior on alpha with a flat/
+// improper treatment of mu -- which has no p >= 2 analogue in the
+// current backend).
+//
+// There is deliberately no unifying "auto-dispatch" function here:
+// call gamma_inference() directly for scalar (p = 1) data, and
+// wishart_inference() directly for matrix (p >= 2) data.
+// -------------------------------------------------------
+
+/** @brief Stop unless n >= 2. Scalar analogue of check_n_p (no p check needed). */
+inline void check_n_gamma(int n) {
+    if (n < 2) stop("n must be >= 2 (got %d); need at least two observations", n);
+}
+
+/**
+ * @brief Validate the gamma (p=1) proper-prior hyperparameters.
+ *
+ * Unlike check_proper_prior_params() (p >= 2), kappa = 0 is a valid
+ * choice here even when beta > 0 -- it represents a proper prior on
+ * alpha combined with a flat/improper treatment of mu, a configuration
+ * the p >= 2 backend's kappa >= 1 requirement doesn't allow for.
+ * Does nothing when improper = true.
+ */
+inline void check_gamma_prior_params(double beta, double eta, double kappa,
+                                      double mu0, bool improper) {
+    if (improper) return;
+
+    check_finite(beta,  "beta");
+    check_finite(eta,   "eta");
+    check_finite(kappa, "kappa");
+    check_finite(mu0,   "mu0");
+    if (beta  < 0.0) stop("beta must be >= 0 for the gamma (p=1) prior (got %f)", beta);
+    if (eta   < 0.0) stop("eta must be >= 0 for the gamma (p=1) prior (got %f)", eta);
+    if (kappa < 0.0) stop("kappa must be >= 0 for the gamma (p=1) prior (got %f)", kappa);
+    if (mu0  <= 0.0) stop("mu0 must be > 0 (got %f)", mu0);
+}
+
+/**
+ * @brief Log unnormalized posterior of alpha, gamma (p = 1) case.
+ *
+ * @param a Shape parameter alpha, must be > 0
+ * @param n Number of scalar observations
+ * @param xbar Sample mean of the observations
+ * @param ldetxbarg mean(log(x)) -- scalar analogue of ldetxbarg
+ * @param beta Gamma prior shape, must be >= 0 (0 = improper)
+ * @param eta Gamma prior rate, must be >= 0
+ * @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+ * @param mu0 Prior center for mu, must be > 0
+ * @return log f*(alpha), or R_NegInf if a <= 0
+ */
+//' Log unnormalized posterior of alpha, gamma (p = 1) case
+//'
+//' The p = 1 reduction of the Wishart model: X_i ~ Gamma(alpha, alpha/mu).
+//' Auto-detects improper vs. proper exactly as the p >= 2 functions do
+//' (beta = 0, eta = 1, kappa = 0 = improper), except kappa = 0 alone
+//' (with beta > 0) is also valid here -- a proper prior on alpha with a
+//' flat/improper treatment of mu -- unlike the p >= 2 backend, which
+//' requires kappa >= 1 whenever the prior isn't fully improper.
+//'
+//' @param a Shape parameter alpha, must be > 0
+//' @param n Number of scalar observations
+//' @param xbar Sample mean of the observations
+//' @param ldetxbarg mean(log(x)) -- scalar analogue of ldetxbarg
+//' @param beta Gamma prior shape, must be >= 0 (0 = improper)
+//' @param eta Gamma prior rate, must be >= 0
+//' @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+//' @param mu0 Prior center for mu, must be > 0
+//' @return log f*(alpha), or -Inf if a <= 0
+//' @export
+// [[Rcpp::export]]
+double lfafun_gamma(double a, int n, double xbar, double ldetxbarg,
+                     double beta = 0.0, double eta = 1.0,
+                     double kappa = 0.0, double mu0 = 1.0) {
+
+    check_n_gamma(n);
+    check_finite(xbar, "xbar");
+    check_finite(ldetxbarg, "ldetxbarg");
+    if (xbar <= 0.0) stop("xbar must be > 0 (got %f)", xbar);
+
+    bool improper = (beta == 0.0 && eta == 1.0 && kappa == 0.0);
+    check_gamma_prior_params(beta, eta, kappa, mu0, improper);
+
+    if (!std::isfinite(a) || a <= 0.0) return R_NegInf;
+
+    double muhat  = (n * xbar + kappa * mu0) / (n + kappa);
+    double lambda = beta * eta + n * (std::log(muhat) - ldetxbarg)
+                   + kappa * std::log(muhat / mu0);
+
+    if (kappa == 0.0) {
+        return R::lgammafn(n * a) - n * R::lgammafn(a) - n * a * std::log((double)n)
+               + (beta - 1.0) * std::log(a) - lambda * a;
+    } else {
+        return R::lgammafn((n + kappa) * a) - n * R::lgammafn(a) - R::lgammafn(kappa * a)
+               + kappa * a * std::log(kappa) - (n + kappa) * a * std::log(n + kappa)
+               + (beta - 1.0) * std::log(a) - lambda * a;
+    }
+}
+
+/**
+ * @brief First derivative of the EM surrogate Q(alpha|alpha^t), gamma (p=1) case.
+ * @keywords internal (not exported; used only by mode_alphaEM_gamma)
+ */
+double Q1fun_gamma(double a, double a0, int n, double xbar, double ldetxbarg,
+                    double beta, double eta, double kappa, double mu0) {
+
+    double muhat = (n * xbar + kappa * mu0) / (n + kappa);
+
+    if (kappa > 0.0) {
+        return (beta - 1.0) / a + (n + kappa) * std::log(a) + n + kappa
+               - n * R::digamma(a) - kappa * R::digamma(kappa * a)
+               - (beta * eta - n * ldetxbarg - kappa * std::log(kappa * mu0))
+               - (n + kappa)
+               - (n + kappa) * (std::log((n + kappa) * a0 * muhat) - R::digamma((n + kappa) * a0));
+    } else {
+        return (beta - 1.0) / a + n * std::log(a) - n * R::digamma(a)
+               - (beta * eta - n * ldetxbarg)
+               - n * (std::log(n * a0 * muhat) - R::digamma(n * a0));
+    }
+}
+
+/**
+ * @brief EM algorithm to find the posterior mode of alpha, gamma (p = 1) case.
+ *
+ * Uses an EM step to a closed-form bracket, then a halving line search
+ * along the sign of Q'(alpha|alpha^t) to guarantee the log-posterior
+ * increases at each step -- simpler than the Newton-within-bracket
+ * approach used for p >= 2 (which needs the multivariate trigamma
+ * function); at p = 1, a plain bisection-style ascent is sufficient
+ * and avoids an extra derivative function.
+ *
+ * The n = 2, kappa = 0, beta = 0 case is a structural (not
+ * data-dependent) failure: the log-posterior's supremum sits exactly
+ * at the domain boundary alpha = 0 for every dataset in that regime
+ * (unlike p >= 2, where an interior mode is always guaranteed for
+ * n >= 2 given non-degenerate data -- see the file-level discussion
+ * of mode_alphaEM_improper). This is checked directly rather than
+ * left to fail via non-convergence or a boundary-convergence
+ * heuristic.
+ *
+ * @param n Number of scalar observations
+ * @param xbar Sample mean of the observations
+ * @param ldetxbarg mean(log(x))
+ * @param beta Gamma prior shape, must be >= 0 (0 = improper)
+ * @param eta Gamma prior rate, must be >= 0
+ * @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+ * @param mu0 Prior center for mu, must be > 0
+ * @param tol Convergence tolerance
+ * @param prnt If true, print EM iterates and bounds
+ * @param max_em_iter Maximum number of EM iterations
+ * @return NumericVector {ahat, log f*(ahat)}
+ */
+//' EM algorithm to find the posterior mode of alpha, gamma (p = 1) case
+//'
+//' Scalar (p = 1) analogue of \code{mode_alphaEM()}. See the C++ doc
+//' comment for details on the bisection-style ascent used here and the
+//' n = 2, kappa = 0, beta = 0 structural boundary case.
+//'
+//' @param n Number of scalar observations
+//' @param xbar Sample mean of the observations
+//' @param ldetxbarg mean(log(x))
+//' @param beta Gamma prior shape, must be >= 0 (0 = improper)
+//' @param eta Gamma prior rate, must be >= 0
+//' @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+//' @param mu0 Prior center for mu, must be > 0
+//' @param tol Convergence tolerance
+//' @param prnt If TRUE, print EM iterates and bounds
+//' @param max_em_iter Maximum number of EM iterations
+//' @return A numeric vector \code{c(ahat, log f*(ahat))}
+//' @export
+// [[Rcpp::export]]
+Rcpp::NumericVector mode_alphaEM_gamma(int n, double xbar, double ldetxbarg,
+                                        double beta = 0.0, double eta = 1.0,
+                                        double kappa = 0.0, double mu0 = 1.0,
+                                        double tol = 1e-6, bool prnt = false,
+                                        int max_em_iter = 1000) {
+
+    check_n_gamma(n);
+    check_finite(xbar, "xbar");
+    check_finite(ldetxbarg, "ldetxbarg");
+    if (xbar <= 0.0) stop("xbar must be > 0 (got %f)", xbar);
+
+    bool improper = (beta == 0.0 && eta == 1.0 && kappa == 0.0);
+    check_gamma_prior_params(beta, eta, kappa, mu0, improper);
+
+    double muhat  = (n * xbar + kappa * mu0) / (n + kappa);
+    double lambda = beta * eta + n * (std::log(muhat) - ldetxbarg)
+                   + kappa * std::log(muhat / mu0);
+
+    if (n == 2 && kappa == 0.0 && beta == 0.0)
+        stop("Posterior mode (gamma/p=1, improper prior) has no interior "
+             "stationary point for n = 2: the log-posterior's supremum sits "
+             "exactly at the domain boundary alpha = 0 for ANY dataset in "
+             "this regime -- this is a structural property of the model at "
+             "n = 2, not a data-dependent numerical issue. Consider using "
+             "more data or switching to a proper prior (supply beta, eta, "
+             "kappa, mu0).");
+
+    double a = (n / 2.0 + beta - 1.0) / lambda;
+    if (kappa > 0.0)
+        a = (n / 2.0 + beta - 1.0) / (2.0 * lambda)
+            + std::sqrt(36.0 * (n / 2.0 + beta - 1.0) * (n / 2.0 + beta - 1.0)
+                        + 12.0 * lambda * (n + 1.0 / kappa)) / (12.0 * lambda);
+    if (!std::isfinite(a) || a <= 0.0)
+        a = std::max(1.0, n / 2.0);
+
+    double lfa = lfafun_gamma(a, n, xbar, ldetxbarg, beta, eta, kappa, mu0);
+    double dev = 999.0;
+    int em_iter = 0;
+
+    const int MAX_HALVINGS = 200;  // safety cap on the inner line-search halving loop
+
+    for (; em_iter < max_em_iter; em_iter++) {
+
+        if (dev <= tol) break;
+
+        double aold  = a;
+        double lfold = lfa;
+
+        double c_t, alow, aup;
+        if (kappa == 0.0) {
+            c_t  = lambda + n * (std::log(n * aold) - R::digamma(n * aold));
+            alow = (n / 2.0 + beta - 1.0) / c_t;
+            aup  = (n + beta - 1.0) / c_t;
+        } else {
+            c_t  = beta * eta - n * ldetxbarg - kappa * std::log(mu0)
+                   + (n + kappa) * (std::log((n + kappa) * aold * muhat)
+                                    - R::digamma((n + kappa) * aold));
+            alow = (beta + (n - 1.0) / 2.0) / c_t;
+            aup  = (beta + n) / c_t;
+        }
+
+        if (prnt)
+            Rcpp::Rcout << "em_iter=" << em_iter << "  a=" << aold
+                        << "  bounds=[" << alow << ", " << aup << "]" << std::endl;
+
+        // if aold outside [alow, aup], move to the closer boundary
+        a = aold;
+        if (aold < alow) a = alow;
+        if (aold > aup)  a = aup;
+        lfa = lfafun_gamma(a, n, xbar, ldetxbarg, beta, eta, kappa, mu0);
+
+        if (aold >= alow && aold <= aup) {
+            // aold already inside bracket: move along the sign of
+            // Q'(alpha|alpha^t), halving the step until lfa actually increases
+            double d1 = Q1fun_gamma(aold, aold, n, xbar, ldetxbarg, beta, eta, kappa, mu0);
+            double mv = (d1 < 0.0) ? (alow - aold) : (aup - aold);
+
+            for (int h = 0; h < MAX_HALVINGS; h++) {
+                double newa  = aold + mv;
+                double newlf = lfafun_gamma(newa, n, xbar, ldetxbarg, beta, eta, kappa, mu0);
+                if (std::isfinite(newlf) && newlf >= lfa) {
+                    a   = newa;
+                    lfa = newlf;
+                    break;
+                }
+                mv /= 2.0;
+                if (h == MAX_HALVINGS - 1)
+                    stop("mode_alphaEM_gamma: line search did not find an "
+                         "improving step after %d halvings near alpha = %.6f",
+                         MAX_HALVINGS, aold);
+            }
+        }
+
+        dev = std::max(std::abs(a - aold), std::abs(lfa - lfold));
+    }
+
+    if (dev > tol && em_iter >= max_em_iter)
+        stop("mode_alphaEM_gamma failed to converge within max_em_iter = %d "
+             "iterations (last alpha = %.6f, |change| = %.3e > tol = %.3e).",
+             max_em_iter, a, dev, tol);
+
+    return Rcpp::NumericVector::create(a, lfa);
+}
+
+/**
+ * @brief Numerically integrate f*(alpha)/f*(ahat), gamma (p = 1) case.
+ * Scalar analogue of integrate_fstar_unified(); same Gauss-Kronrod /
+ * mode-centering approach.
+ */
+double integrate_fstar_gamma(int n, double xbar, double ldetxbarg,
+                              double mxlfa, double ahat,
+                              double beta, double eta, double kappa, double mu0,
+                              double tol = 1e-6) {
+
+    using boost::math::quadrature::gauss_kronrod;
+
+    auto integrand = [&](double b) -> double {
+        double a = ahat + b;
+        if (a <= 0.0) return 0.0;
+        double logf = lfafun_gamma(a, n, xbar, ldetxbarg, beta, eta, kappa, mu0) - mxlfa;
+        if (!std::isfinite(logf)) return 0.0;
+        return std::exp(logf);
+    };
+
+    const double LOG_TAIL_CUTOFF = -500.0;
+    double b_lower = std::max(-ahat, LOG_TAIL_CUTOFF);
+    double error;
+
+    return gauss_kronrod<double, 61>::integrate(
+        integrand, b_lower,
+        std::numeric_limits<double>::infinity(),
+        15, tol, &error
+    );
+}
+
+/**
+ * @brief Theoretical acceptance rate of the gamma (p = 1) rejection sampler.
+ * Scalar analogue of acpt_rate_unified(); no truncation term is needed
+ * here since the domain boundary (alpha = 0) coincides with the Gamma
+ * covering density's own support.
+ */
+double acpt_rate_gamma(double ahat, int n, double xbar, double ldetxbarg,
+                        double mxlfa, double beta, double eta, double kappa,
+                        double mu0, double lambda, double nu_star) {
+
+    double scale = 1.0 / lambda;
+    double integral = integrate_fstar_gamma(n, xbar, ldetxbarg, mxlfa, ahat,
+                                             beta, eta, kappa, mu0);
+    double log_g_mode = R::dgamma(ahat, nu_star, scale, 1);
+    return std::exp(std::log(integral) + log_g_mode);
+}
+
+/**
+ * @brief Rejection sampler for the joint posterior of (alpha, mu), gamma (p=1) case.
+ *
+ * Draws alpha from the Gamma(nu_star, lambda) covering density (no
+ * truncation needed, since the domain boundary alpha = 0 coincides with
+ * the Gamma proposal's own support), then draws mu | alpha, x from its
+ * conditional posterior: mu | alpha, x ~ reciprocal-Gamma(nk_eff*alpha,
+ * alpha*(n*xbar + kappa*mu0)), where nk_eff = n if kappa = 0 (improper
+ * on mu) or n+kappa otherwise -- the p = 1 reduction of the inv-Wishart
+ * conditional used by the p >= 2 backend (inv-Wishart_1(nu, psi) =
+ * InverseGamma(nu/2, psi/2) = reciprocal-Gamma(nu/2, psi/2)).
+ *
+ * @param n Number of scalar observations
+ * @param xbar Sample mean of the observations
+ * @param ldetxbarg mean(log(x))
+ * @param ahat Posterior mode from mode_alphaEM_gamma()[1]
+ * @param mxlfa log f*(ahat) from mode_alphaEM_gamma()[2]
+ * @param beta Gamma prior shape, must be >= 0 (0 = improper)
+ * @param eta Gamma prior rate, must be >= 0
+ * @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+ * @param mu0 Prior center for mu, must be > 0
+ * @param nsamp Number of posterior samples
+ * @return List with alpha_sample, mu_sample, empirical_acpt_rate,
+ *         theoretical_acpt_rate
+ */
+//' Rejection sampler for the joint posterior of (alpha, mu), gamma (p = 1) case
+//'
+//' Scalar (p = 1) analogue of \code{rejection_sampler()}. mu | alpha, x is
+//' drawn from reciprocal-Gamma(nk_eff*alpha, alpha*(n*xbar+kappa*mu0)) --
+//' see the C++ doc comment for the derivation.
+//'
+//' @param n Number of scalar observations
+//' @param xbar Sample mean of the observations
+//' @param ldetxbarg mean(log(x))
+//' @param ahat Posterior mode from \code{mode_alphaEM_gamma()[1]}
+//' @param mxlfa log f*(ahat) from \code{mode_alphaEM_gamma()[2]}
+//' @param beta Gamma prior shape, must be >= 0 (0 = improper)
+//' @param eta Gamma prior rate, must be >= 0
+//' @param kappa Prior strength on mu, must be >= 0 (0 = improper on mu)
+//' @param mu0 Prior center for mu, must be > 0
+//' @param nsamp Number of posterior samples (default 10000)
+//' @return A list with \code{alpha_sample}, \code{mu_sample},
+//'   \code{empirical_acpt_rate}, \code{theoretical_acpt_rate}
+//' @export
+// [[Rcpp::export]]
+Rcpp::List rejection_sampler_gamma(int n, double xbar, double ldetxbarg,
+                                    double ahat, double mxlfa,
+                                    double beta = 0.0, double eta = 1.0,
+                                    double kappa = 0.0, double mu0 = 1.0,
+                                    int nsamp = 10000) {
+
+    check_n_gamma(n);
+    check_nsamp(nsamp);
+    check_finite(ahat, "ahat");
+    check_finite(mxlfa, "mxlfa");
+    if (ahat <= 0.0) stop("ahat must be > 0 (got %f)", ahat);
+
+    bool improper = (beta == 0.0 && eta == 1.0 && kappa == 0.0);
+    check_gamma_prior_params(beta, eta, kappa, mu0, improper);
+
+    double muhat  = (n * xbar + kappa * mu0) / (n + kappa);
+    double lambda = beta * eta + n * (std::log(muhat) - ldetxbarg)
+                   + kappa * std::log(muhat / mu0);
+    if (!(lambda > 0.0))
+        stop("lambda must be > 0 for a valid Gamma covering density (got %f)", lambda);
+
+    double nu_star = ahat * lambda + 1.0;
+    double scale   = 1.0 / lambda;
+
+    double log_g_at_mode = R::dgamma(ahat, nu_star, scale, 1);
+    double log_M = -log_g_at_mode;
+
+    Rcpp::NumericVector alpha_sample(nsamp);
+    Rcpp::NumericVector mu_sample(nsamp);
+
+    long long accepted    = 0;
+    long long total_draws = 0;
+    const long long max_draws = static_cast<long long>(nsamp) * 100000LL;
+
+    double nk_eff = (kappa == 0.0) ? (double)n : (n + kappa);
+
+    while (accepted < nsamp) {
+        total_draws++;
+
+        if (total_draws > max_draws)
+            stop("rejection_sampler_gamma: exceeded %lld draws -- check that "
+                 "the covering bound is valid", max_draws);
+
+        double a_prop = R::rgamma(nu_star, scale);
+        double log_f  = lfafun_gamma(a_prop, n, xbar, ldetxbarg, beta, eta, kappa, mu0) - mxlfa;
+        if (!std::isfinite(log_f)) continue;
+
+        double log_g      = R::dgamma(a_prop, nu_star, scale, 1);
+        double log_accept = log_f - log_M - log_g;
+
+        if (std::log(R::runif(0.0, 1.0)) < log_accept) {
+
+            double rate    = a_prop * (n * xbar + kappa * mu0);
+            double mu_draw = 1.0 / R::rgamma(nk_eff * a_prop, 1.0 / rate);
+
+            alpha_sample[accepted] = a_prop;
+            mu_sample[accepted]    = mu_draw;
+            accepted++;
+        }
+    }
+
+    double accept_rate = static_cast<double>(nsamp) / total_draws;
+    double theoretical_rate = acpt_rate_gamma(ahat, n, xbar, ldetxbarg, mxlfa,
+                                               beta, eta, kappa, mu0, lambda, nu_star);
+
+    return Rcpp::List::create(
+        Rcpp::Named("alpha_sample")          = alpha_sample,
+        Rcpp::Named("mu_sample")             = mu_sample,
+        Rcpp::Named("empirical_acpt_rate")   = accept_rate,
+        Rcpp::Named("theoretical_acpt_rate") = theoretical_rate
+    );
+}
+
+/**
+ * @brief Bayesian inference for the Wishart shape parameter, gamma (p = 1) case.
+ *
+ * Given x_1,...,x_n ~ iid Gamma(alpha, alpha/mu) -- the p = 1 reduction
+ * of X_i ~ Wishart_p(2*alpha, Sigma) -- computes the posterior of
+ * (alpha, mu) under either an improper or proper prior. Runs the full
+ * pipeline: sufficient statistics, EM mode finding, and rejection
+ * sampling. Scalar (p = 1) analogue of wishart_inference(); no
+ * unifying dispatch with wishart_inference() is provided -- call
+ * gamma_inference() directly for scalar data, wishart_inference()
+ * directly for matrix data.
+ *
+ * @param x Numeric vector of n scalar observations, each > 0
+ * @param mu0 Prior center for mu, must be > 0 (ignored if improper)
+ * @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+ * @param eta Gamma prior rate, must be >= 0 (ignored if improper)
+ * @param kappa Prior strength on mu, must be >= 0 (ignored if improper)
+ * @param nsamp Number of posterior samples
+ * @param tol Convergence tolerance for the EM mode finder
+ * @param prnt If true, print EM iterates
+ * @param max_em_iter Maximum number of EM iterations
+ * @return List with two sublists:
+ *           results:
+ *             - alpha_samples:         vector of length nsamp
+ *             - mu_samples:            vector of length nsamp
+ *             - ahat:                  posterior mode of alpha
+ *             - theoretical_acpt_rate: theoretical acceptance rate
+ *             - empirical_acpt_rate:   empirical acceptance rate
+ *           statistics:
+ *             - xbar:                  sample mean
+ *             - muhat:                 posterior center of mu
+ *             - log_det_geometric_mean: ldetxbarg
+ *             - cover_shape:           nu_star
+ *             - cover_rate:            lambda
+ *             - elapsed_seconds:       wall-clock time
+ * @throws Rcpp::exception if beta < 0, eta < 0, or kappa < 0 (proper prior)
+ */
+//' Bayesian inference for the Wishart shape parameter, gamma (p = 1) case
+//'
+//' Given \code{x_1,...,x_n ~ iid Gamma(alpha, alpha/mu)} -- the p = 1
+//' reduction of \code{X_i ~ Wishart_p(2*alpha, Sigma)} -- computes the
+//' posterior of (alpha, mu) under either an improper or proper prior.
+//' Scalar (p = 1) analogue of \code{wishart_inference()}: takes a plain
+//' numeric vector instead of a p x p x n array, since each observation
+//' is already a positive scalar. There is no unifying dispatch with
+//' \code{wishart_inference()} -- call this directly for scalar data.
+//'
+//' @param x Numeric vector of n scalar observations, each > 0
+//' @param mu0 Prior center for mu, must be > 0 (ignored if improper)
+//' @param beta Gamma prior shape, must be >= 0 (ignored if improper)
+//' @param eta Gamma prior rate, must be >= 0 (ignored if improper)
+//' @param kappa Prior strength on mu, must be >= 0 (ignored if improper)
+//' @param nsamp Number of posterior samples
+//' @param tol Convergence tolerance for the EM mode finder
+//' @param prnt If TRUE, print EM iterates
+//' @param max_em_iter Maximum number of EM iterations
+//' @return A list with \code{results} (alpha_samples, mu_samples, ahat,
+//'   theoretical_acpt_rate, empirical_acpt_rate) and \code{statistics}
+//'   (xbar, muhat, log_det_geometric_mean, cover_shape, cover_rate,
+//'   elapsed_seconds). If a convergence failure is caught internally,
+//'   returns \code{list(error = "...")} instead.
+//' @export
+// [[Rcpp::export]]
+Rcpp::List gamma_inference(Rcpp::NumericVector x,
+                            double mu0        = 1.0,
+                            double beta        = 0.0,
+                            double eta         = 1.0,
+                            double kappa       = 0.0,
+                            int    nsamp       = 10000,
+                            double tol         = 1e-6,
+                            bool   prnt        = false,
+                            int    max_em_iter = 1000) {
+
+    int n = x.size();
+    check_n_gamma(n);
+    for (int i = 0; i < n; i++) {
+        if (!std::isfinite(x[i]) || x[i] <= 0.0)
+            stop("all observations in x must be finite and > 0 (x[%d] = %f)", i + 1, x[i]);
+    }
+
+    bool improper = (beta == 0.0 && eta == 1.0 && kappa == 0.0);
+    check_gamma_prior_params(beta, eta, kappa, mu0, improper);
+
+    try {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        double xbar = 0.0;
+        for (int i = 0; i < n; i++) xbar += x[i];
+        xbar /= n;
+
+        double ldetxbarg = 0.0;
+        for (int i = 0; i < n; i++) ldetxbarg += std::log(x[i]);
+        ldetxbarg /= n;
+
+        Rcpp::NumericVector a_star = mode_alphaEM_gamma(n, xbar, ldetxbarg,
+                                                          beta, eta, kappa, mu0,
+                                                          tol, prnt, max_em_iter);
+        double ahat  = a_star[0];
+        double mxlfa = a_star[1];
+
+        Rcpp::List sampling = rejection_sampler_gamma(n, xbar, ldetxbarg, ahat, mxlfa,
+                                                        beta, eta, kappa, mu0, nsamp);
+
+        Rcpp::NumericVector alpha_sample = sampling["alpha_sample"];
+        Rcpp::NumericVector mu_sample    = sampling["mu_sample"];
+        double empirical_acpt   = sampling["empirical_acpt_rate"];
+        double theoretical_acpt = sampling["theoretical_acpt_rate"];
+
+        double muhat  = (n * xbar + kappa * mu0) / (n + kappa);
+        double lambda = beta * eta + n * (std::log(muhat) - ldetxbarg)
+                       + kappa * std::log(muhat / mu0);
+        double nu_star = ahat * lambda + 1.0;
+
+        auto end = std::chrono::high_resolution_clock::now();
+        double elapsed = std::chrono::duration<double>(end - start).count();
+
+        return Rcpp::List::create(
+            Rcpp::Named("results") = Rcpp::List::create(
+                Rcpp::Named("alpha_samples")         = alpha_sample,
+                Rcpp::Named("mu_samples")            = mu_sample,
+                Rcpp::Named("ahat")                  = ahat,
+                Rcpp::Named("theoretical_acpt_rate") = theoretical_acpt,
+                Rcpp::Named("empirical_acpt_rate")   = empirical_acpt
+            ),
+            Rcpp::Named("statistics") = Rcpp::List::create(
+                Rcpp::Named("xbar")                   = xbar,
+                Rcpp::Named("muhat")                  = muhat,
                 Rcpp::Named("log_det_geometric_mean") = ldetxbarg,
                 Rcpp::Named("cover_shape")            = nu_star,
                 Rcpp::Named("cover_rate")             = lambda,

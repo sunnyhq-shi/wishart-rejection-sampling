@@ -19,9 +19,9 @@ lfafun_proper(a, n, p, ldet_muhat, ldetxbarg, ldet_mu0, beta, eta, kappa)
 
 \item{ldet_mu0}{log|mu0|}
 
-\item{beta}{Gamma prior shape, must be > 1}
+\item{beta}{Gamma prior shape, must be >= 0}
 
-\item{eta}{Gamma prior rate parameter}
+\item{eta}{Gamma prior rate parameter, must be >= 0}
 
 \item{kappa}{inv-Wishart prior strength, must be >= 1}
 }
@@ -29,8 +29,8 @@ lfafun_proper(a, n, p, ldet_muhat, ldetxbarg, ldet_mu0, beta, eta, kappa)
 log f*(alpha), or -Inf if outside domain
 }
 \description{
-The proper prior alpha ~ Gamma(beta, beta*eta) (truncated at
-(p-1)/2) and mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
+The proper prior (alpha - (p-1)/2) ~ Gamma(beta, rate = beta*eta) and
+mu|alpha ~ inv-Wishart(2*kappa*alpha, 2*kappa*alpha*mu0),
 after marginalizing over mu, gives a closed-form log posterior for
 alpha. Returns \code{-Inf} outside the domain \code{alpha > (p-1)/2}.
 }

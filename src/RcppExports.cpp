@@ -168,6 +168,83 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// lfafun_gamma
+double lfafun_gamma(double a, int n, double xbar, double ldetxbarg, double beta, double eta, double kappa, double mu0);
+RcppExport SEXP _wishartinference_lfafun_gamma(SEXP aSEXP, SEXP nSEXP, SEXP xbarSEXP, SEXP ldetxbargSEXP, SEXP betaSEXP, SEXP etaSEXP, SEXP kappaSEXP, SEXP mu0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type a(aSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type xbar(xbarSEXP);
+    Rcpp::traits::input_parameter< double >::type ldetxbarg(ldetxbargSEXP);
+    Rcpp::traits::input_parameter< double >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type kappa(kappaSEXP);
+    Rcpp::traits::input_parameter< double >::type mu0(mu0SEXP);
+    rcpp_result_gen = Rcpp::wrap(lfafun_gamma(a, n, xbar, ldetxbarg, beta, eta, kappa, mu0));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mode_alphaEM_gamma
+Rcpp::NumericVector mode_alphaEM_gamma(int n, double xbar, double ldetxbarg, double beta, double eta, double kappa, double mu0, double tol, bool prnt, int max_em_iter);
+RcppExport SEXP _wishartinference_mode_alphaEM_gamma(SEXP nSEXP, SEXP xbarSEXP, SEXP ldetxbargSEXP, SEXP betaSEXP, SEXP etaSEXP, SEXP kappaSEXP, SEXP mu0SEXP, SEXP tolSEXP, SEXP prntSEXP, SEXP max_em_iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type xbar(xbarSEXP);
+    Rcpp::traits::input_parameter< double >::type ldetxbarg(ldetxbargSEXP);
+    Rcpp::traits::input_parameter< double >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type kappa(kappaSEXP);
+    Rcpp::traits::input_parameter< double >::type mu0(mu0SEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< bool >::type prnt(prntSEXP);
+    Rcpp::traits::input_parameter< int >::type max_em_iter(max_em_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(mode_alphaEM_gamma(n, xbar, ldetxbarg, beta, eta, kappa, mu0, tol, prnt, max_em_iter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rejection_sampler_gamma
+Rcpp::List rejection_sampler_gamma(int n, double xbar, double ldetxbarg, double ahat, double mxlfa, double beta, double eta, double kappa, double mu0, int nsamp);
+RcppExport SEXP _wishartinference_rejection_sampler_gamma(SEXP nSEXP, SEXP xbarSEXP, SEXP ldetxbargSEXP, SEXP ahatSEXP, SEXP mxlfaSEXP, SEXP betaSEXP, SEXP etaSEXP, SEXP kappaSEXP, SEXP mu0SEXP, SEXP nsampSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type xbar(xbarSEXP);
+    Rcpp::traits::input_parameter< double >::type ldetxbarg(ldetxbargSEXP);
+    Rcpp::traits::input_parameter< double >::type ahat(ahatSEXP);
+    Rcpp::traits::input_parameter< double >::type mxlfa(mxlfaSEXP);
+    Rcpp::traits::input_parameter< double >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type kappa(kappaSEXP);
+    Rcpp::traits::input_parameter< double >::type mu0(mu0SEXP);
+    Rcpp::traits::input_parameter< int >::type nsamp(nsampSEXP);
+    rcpp_result_gen = Rcpp::wrap(rejection_sampler_gamma(n, xbar, ldetxbarg, ahat, mxlfa, beta, eta, kappa, mu0, nsamp));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gamma_inference
+Rcpp::List gamma_inference(Rcpp::NumericVector x, double mu0, double beta, double eta, double kappa, int nsamp, double tol, bool prnt, int max_em_iter);
+RcppExport SEXP _wishartinference_gamma_inference(SEXP xSEXP, SEXP mu0SEXP, SEXP betaSEXP, SEXP etaSEXP, SEXP kappaSEXP, SEXP nsampSEXP, SEXP tolSEXP, SEXP prntSEXP, SEXP max_em_iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< double >::type mu0(mu0SEXP);
+    Rcpp::traits::input_parameter< double >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type kappa(kappaSEXP);
+    Rcpp::traits::input_parameter< int >::type nsamp(nsampSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< bool >::type prnt(prntSEXP);
+    Rcpp::traits::input_parameter< int >::type max_em_iter(max_em_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(gamma_inference(x, mu0, beta, eta, kappa, nsamp, tol, prnt, max_em_iter));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_wishartinference_test", (DL_FUNC) &_wishartinference_test, 0},
@@ -180,6 +257,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_wishartinference_mode_alphaEM", (DL_FUNC) &_wishartinference_mode_alphaEM, 12},
     {"_wishartinference_rejection_sampler", (DL_FUNC) &_wishartinference_rejection_sampler, 13},
     {"_wishartinference_wishart_inference", (DL_FUNC) &_wishartinference_wishart_inference, 10},
+    {"_wishartinference_lfafun_gamma", (DL_FUNC) &_wishartinference_lfafun_gamma, 8},
+    {"_wishartinference_mode_alphaEM_gamma", (DL_FUNC) &_wishartinference_mode_alphaEM_gamma, 10},
+    {"_wishartinference_rejection_sampler_gamma", (DL_FUNC) &_wishartinference_rejection_sampler_gamma, 10},
+    {"_wishartinference_gamma_inference", (DL_FUNC) &_wishartinference_gamma_inference, 9},
     {NULL, NULL, 0}
 };
 
