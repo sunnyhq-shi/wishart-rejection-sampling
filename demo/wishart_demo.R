@@ -24,12 +24,11 @@
 # is installed directly from R-universe (source is
 # compiled on R-universe's build servers, not locally)
 # -------------------------------------------------------
-if (!requireNamespace("wishartinference", quietly = TRUE)) {
-  install.packages(
-    "wishartinference",
-    repos = c("https://sunnyhq-shi.r-universe.dev", "https://cloud.r-project.org")
-  )
-}
+install.packages(
+  "wishartinference",
+  repos = c("https://sunnyhq-shi.r-universe.dev", "https://cloud.r-project.org")
+)
+
 library(wishartinference)
 
 # Verify the library loaded correctly.
